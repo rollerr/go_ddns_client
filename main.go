@@ -4,13 +4,13 @@ import (
 	"context"
 	"flag"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
 
 	cloudfare "github.com/cloudflare/cloudflare-go"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
 )
@@ -40,10 +40,8 @@ func getKeyFromPath(apiFilePath string) string {
 	return string(file)
 }
 
-func getConfigFromYaml() Config {
-	var ConfigPath string
-	flag.StringVar(&ConfigPath, "config", "config.yaml", "./")
-	flag.Parse()
+func getConfigFromYaml(configFilePath string) Config {
+	var ConfigPath = configFilePath
 	log.Printf("Reading config from %s", ConfigPath)
 
 	f, err := os.Open(ConfigPath)
@@ -131,6 +129,7 @@ func publishNewIPToCloudflare(currentIP string, config Config) error {
 	api, err := cloudfare.NewWithAPIToken(token)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 	ctx := context.Background()
 
@@ -155,7 +154,23 @@ func publishNewIPToCloudflare(currentIP string, config Config) error {
 }
 
 func main() {
-	config := getConfigFromYaml()
+	file, err := os.OpenFile("/tmp/dns-updater.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666) 
+	if err == nil {
+		log.SetOutput(file)
+	} else {
+		log.Println("Failed to log to file, using default stderr")
+	}
+	defer file.Close()
+
+	multi := io.MultiWriter(os.Stdout, file)
+	log.SetOutput(multi)
+	log.SetLevel(log.InfoLevel)
+
+	var configFilePath = flag.String("configFilePath", "./config.yaml", "Path to config file")
+	flag.Parse()
+	log.Printf("Config file path is: %s", *configFilePath)
+
+	config := getConfigFromYaml(*configFilePath)
 	sshKey := getKeyFromPath(config.SSHKeyPath)
 	sshResult := fetchWANIPOverSSH(config.SSHUser, sshKey, config.DestinationIP)
 	log.Printf("Current WAN IP: %s", sshResult)
