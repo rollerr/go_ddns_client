@@ -90,7 +90,7 @@ func fetchWANIPOverSSH(sshUser string, sshKey string, destinationIP string) stri
 	}
 	defer session.Close()
 
-	output, err := session.Output(`ip addr show lo | grep "inet " | awk "{print $2}"`)
+	output, err := session.Output(`ip addr show eth0 | grep "inet " | awk "{print $2}"`)
 	parsedWANIP := parseWANIPFromOutput(string(output))
 	if err != nil {
 		log.Fatal(err)
@@ -127,6 +127,7 @@ func checkIfDNSRecordNeedsUpdate(currentIP string, domain string) bool {
 
 func publishNewIPToCloudflare(currentIP string, config Config) error {
 	token := getKeyFromPath(config.CloudFareTokenPath)
+	token = strings.TrimSpace(token)
 	api, apierr := cloudfare.NewWithAPIToken(token)
 	if apierr != nil {
 		log.Fatal(apierr)
@@ -142,6 +143,7 @@ func publishNewIPToCloudflare(currentIP string, config Config) error {
 		Content: currentIP,
 		TTL:     120,
 	}
+	log.Printf("Updating DNS record to %s for domain: %s", currentIP, config.Domain)
 	err := api.UpdateDNSRecord(ctx, zoneIdentifier, newRecord)
 	if err != nil {
 		log.Fatal(err)
