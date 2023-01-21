@@ -16,14 +16,14 @@ import (
 )
 
 type Config struct {
-	Email          string `yaml:"email"`
-	ZoneRecordID   string `yaml:"zone_record_id"`
-	ZoneID         string `yaml:"zone_id"`
-	SSHKeyPath     string `yaml:"ssh_key_path"`
-	SSHUser        string `yaml:"ssh_user"`
-	Domain         string `yaml:"domain"`
-	cloudFareToken string `yaml:"api_file_path"`
-	DestinationIP  string `yaml:"destination_ip"`
+	CloudFareTokenPath string `yaml:"cloudflare_token"`
+	Email              string `yaml:"email"`
+	ZoneRecordID       string `yaml:"zone_record_id"`
+	ZoneID             string `yaml:"zone_id"`
+	SSHKeyPath         string `yaml:"ssh_key_path"`
+	SSHUser            string `yaml:"ssh_user"`
+	Domain             string `yaml:"domain"`
+	DestinationIP      string `yaml:"destination_ip"`
 }
 
 func getKeyFromPath(apiFilePath string) string {
@@ -42,8 +42,9 @@ func getKeyFromPath(apiFilePath string) string {
 
 func getConfigFromYaml() Config {
 	var ConfigPath string
-	flag.StringVar(&ConfigPath, "config", "config.yaml", "Path to config file")
+	flag.StringVar(&ConfigPath, "config", "config.yaml", "./")
 	flag.Parse()
+	log.Printf("Reading config from %s", ConfigPath)
 
 	f, err := os.Open(ConfigPath)
 	if err != nil {
@@ -51,15 +52,17 @@ func getConfigFromYaml() Config {
 	}
 	defer f.Close()
 	configFile, err := io.ReadAll(f)
+	log.Printf("Config file is: %s", configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var config Config
-	err = yaml.Unmarshal(configFile, &config)
+	var YAMLConfig Config
+	err = yaml.Unmarshal(configFile, &YAMLConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return config
+	log.Printf("Cloudfare token path is: %s", YAMLConfig.CloudFareTokenPath)
+	return YAMLConfig
 }
 
 func fetchWANIPOverSSH(sshUser string, sshKey string, destinationIP string) string {
@@ -123,23 +126,30 @@ func checkIfDNSRecordNeedsUpdate(currentIP string, domain string) bool {
 }
 
 func publishNewIPToCloudflare(currentIP string, config Config) error {
-	log.Printf("Publishing new IP to Cloudflare (%s)", currentIP)
-	log.Printf("Reading API key from %s", config.cloudFareToken)
-	token := getKeyFromPath(config.cloudFareToken)
-	api, err := cloudfare.NewWithAPIToken(token)
-	if err != nil {
-		log.Fatal(err)
-		return err
+	token := getKeyFromPath(config.CloudFareTokenPath)
+	api, apierr := cloudfare.NewWithAPIToken(token)
+	if apierr != nil {
+		log.Fatal(apierr)
 	}
+	ctx := context.Background()
+
+	zoneIdentifier := cloudfare.ZoneIdentifier(config.ZoneID)
 
 	newRecord := cloudfare.UpdateDNSRecordParams{
 		Type:    "A",
+		ID:      config.ZoneRecordID,
 		Name:    config.Domain,
 		Content: currentIP,
 		TTL:     120,
 	}
-	newerr := api.UpdateDNSRecord(context.Background(), nil, newRecord)
-	return newerr
+	err := api.UpdateDNSRecord(ctx, zoneIdentifier, newRecord)
+	if err != nil {
+		log.Fatal(err)
+
+	} else {
+		log.Printf("DNS record updated to %s", currentIP)
+	}
+	return err
 }
 
 func main() {
