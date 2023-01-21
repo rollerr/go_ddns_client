@@ -128,9 +128,9 @@ func checkIfDNSRecordNeedsUpdate(currentIP string, domain string) bool {
 func publishNewIPToCloudflare(currentIP string, config Config) error {
 	token := getKeyFromPath(config.CloudFareTokenPath)
 	token = strings.TrimSpace(token)
-	api, apierr := cloudfare.NewWithAPIToken(token)
-	if apierr != nil {
-		log.Fatal(apierr)
+	api, err := cloudfare.NewWithAPIToken(token)
+	if err != nil {
+		log.Fatal(err)
 	}
 	ctx := context.Background()
 
@@ -144,7 +144,7 @@ func publishNewIPToCloudflare(currentIP string, config Config) error {
 		TTL:     120,
 	}
 	log.Printf("Updating DNS record to %s for domain: %s", currentIP, config.Domain)
-	err := api.UpdateDNSRecord(ctx, zoneIdentifier, newRecord)
+	err = api.UpdateDNSRecord(ctx, zoneIdentifier, newRecord)
 	if err != nil {
 		log.Fatal(err)
 
