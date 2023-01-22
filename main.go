@@ -140,7 +140,6 @@ func publishNewIPToCloudflare(currentIP string, config Config) error {
 		ID:      config.ZoneRecordID,
 		Name:    config.Domain,
 		Content: currentIP,
-		TTL:     120,
 	}
 	log.Printf("Updating DNS record to %s for domain: %s", currentIP, config.Domain)
 	err = api.UpdateDNSRecord(ctx, zoneIdentifier, newRecord)
